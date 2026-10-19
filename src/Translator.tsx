@@ -7,6 +7,7 @@ import { TextTranslator } from "./TextTranslator";
 import { Input, InputMode, ActionType, ProgressInfo } from "./Input";
 import { ImageState } from "./Overlay";
 import { logger } from "./Logger";
+import { readJapanese } from './JapaneseReader';
 
 // Screenshot response interface
 export interface ScreenshotResponse {
@@ -17,6 +18,12 @@ export interface ScreenshotResponse {
 // Main app logic
 export class GameTranslatorLogic {
     private isProcessing = false;
+    private readingMode = false;
+
+    setReadingMode(enabled: boolean): void {
+        if (this.readingMode !== enabled) this.dismiss();
+        this.readingMode = enabled;
+    }
     public imageState: ImageState;
     private textRecognizer: TextRecognizer;
     private textTranslator: TextTranslator;
@@ -25,6 +32,7 @@ export class GameTranslatorLogic {
     private enabled: boolean = true; // Add enabled state
     private confidenceThreshold: number = 0.6; // Default confidence threshold
     private pauseGameOnOverlay: boolean = false;
+    private pausedPid: number | null = null;
     private hideIdenticalTranslations: boolean = false;
     private currentRunId: number = 0;
 
@@ -70,10 +78,6 @@ export class GameTranslatorLogic {
                 if (this.isProcessing) return;
                 if (!this.canStartTranslation()) return;
 
-                // Pause first so the game freezes before the screenshot
-                if (this.pauseGameOnOverlay) {
-                    this.pauseCurrentGame().catch(err => logger.error('Translator', 'Pause failed', err));
-                }
                 this.takeScreenshotAndTranslate().catch(err => logger.error('Translator', 'Screenshot failed', err));
             }
         });
@@ -81,11 +85,7 @@ export class GameTranslatorLogic {
         imageState.onStateChanged((visible, _, __, ___, ____, _____, ______, _______, ________) => {
             this.shortcutInput.setOverlayVisible(visible);
 
-            if (!this.enabled) return;
-
-            if (this.pauseGameOnOverlay && !visible) {
-                this.resumeCurrentGame();
-            }
+            if (!visible) this.resumeCurrentGame();
         });
 
         // Set up progress listener
@@ -190,6 +190,7 @@ export class GameTranslatorLogic {
     setPauseGameOnOverlay = (enabled: boolean): void => {
         logger.debug('Translator', `Setting pauseGameOnOverlay to: ${enabled}`);
         this.pauseGameOnOverlay = enabled;
+        if (!enabled) this.resumeCurrentGame();
 
         // If overlay is currently visible and we're enabling this setting, pause the game
         if (enabled && this.imageState.isVisible()) {
@@ -221,6 +222,7 @@ export class GameTranslatorLogic {
                 // Call the pause function in the backend
                 const pauseResult = await call<[number], boolean>('pause', pid);
                 if (pauseResult) {
+                    this.pausedPid = pid;
                     logger.info('Translator', 'Game paused successfully');
                 } else {
                     logger.error('Translator', 'Failed to pause game');
@@ -235,31 +237,17 @@ export class GameTranslatorLogic {
 
     // Method to resume the current game
     async resumeCurrentGame(): Promise<void> {
+        const pid = this.pausedPid;
+        if (!pid) return;
+        this.pausedPid = null;
         try {
-            // Get the current running app ID
-            const mainApp = Router.MainRunningApp;
-            if (!mainApp || !mainApp.appid) {
-                logger.debug('Translator', 'No game running to resume');
-                return;
-            }
-
-            // Use the pid_from_appid function to get the process ID
-            const pid = await call<[number], number>('pid_from_appid', Number(mainApp.appid));
-
-            if (pid) {
-                logger.info('Translator', `Resuming game with appid ${mainApp.appid}, pid ${pid}`);
-
-                // Call the resume function in the backend
-                const resumeResult = await call<[number], boolean>('resume', pid);
-                if (resumeResult) {
-                    logger.info('Translator', 'Game resumed successfully');
-                } else {
-                    logger.error('Translator', 'Failed to resume game');
-                }
-            } else {
-                logger.error('Translator', 'Failed to get PID for game');
+            const resumed = await call<[number], boolean>('resume', pid);
+            if (!resumed) {
+                this.pausedPid = pid;
+                logger.error('Translator', 'Failed to resume paused game');
             }
         } catch (error) {
+            this.pausedPid = pid;
             logger.error('Translator', 'Error resuming game', error);
         }
     }
@@ -284,6 +272,7 @@ export class GameTranslatorLogic {
 
     // Clean up resources when plugin is unmounted
     cleanup(): void {
+        this.dismiss();
         if (this.shortcutInput) {
             this.shortcutInput.unregister();
         }
@@ -305,7 +294,6 @@ export class GameTranslatorLogic {
 
     dismiss = (): void => {
         this.currentRunId++;
-        this.isProcessing = false;
         if (this.imageState.isVisible()) {
             this.imageState.hideImage();
             this.shortcutInput.setOverlayVisible(false);
@@ -323,14 +311,19 @@ export class GameTranslatorLogic {
 
         const runId = ++this.currentRunId;
         const isCancelled = (): boolean => runId !== this.currentRunId;
+        const readingMode = this.readingMode;
+        let screenshotPath = '';
 
         try {
             this.isProcessing = true;
+            if (this.pauseGameOnOverlay) await this.pauseCurrentGame();
+            if (isCancelled()) return;
 
             // Take screenshot FIRST while screen is clean (no overlay visible)
             const appName = Router.MainRunningApp?.display_name || "";
             logger.info('Translator', `Taking new screenshot for: ${appName}`);
             const result = await call<[string], ScreenshotResponse>('take_screenshot', appName);
+            screenshotPath = result?.path || '';
 
             if (isCancelled()) {
                 logger.debug('Translator', 'Translation cancelled before screenshot processed');
@@ -351,6 +344,18 @@ export class GameTranslatorLogic {
                 ? "Recognizing and Translating"
                 : "Recognizing";
             this.imageState.updateProcessingStep(recognizingStep, false, this.ocrMethodHint());
+
+            if (readingMode) {
+                this.imageState.updateProcessingStep('Reading Japanese', false, 'Offline OCR and dictionary');
+                const readingRegions = await readJapanese(result.path);
+                if (isCancelled()) return;
+                if (!readingRegions.length) {
+                    this.imageState.updateProcessingStep('No Japanese words found', true);
+                } else {
+                    this.imageState.showTranslatedImage(result.base64, readingRegions);
+                }
+                return;
+            }
 
             const textRegions = await this.textRecognizer.recognizeTextFile(result.path);
             if (isCancelled()) {
@@ -400,6 +405,10 @@ export class GameTranslatorLogic {
             }
 
             logger.error('Translator', 'Screenshot and translation error', error);
+            if (readingMode) {
+                this.imageState.updateProcessingStep(error instanceof Error ? error.message : 'Japanese reading failed', true);
+                return;
+            }
 
             // Check if this is a network error
             if (error instanceof NetworkError) {
@@ -431,9 +440,9 @@ export class GameTranslatorLogic {
             }
         }
         finally {
-            if (!isCancelled()) {
-                this.isProcessing = false;
-            }
+            if (screenshotPath) await call('discard_screenshot', screenshotPath).catch(() => {});
+            this.isProcessing = false;
+            if (this.pauseGameOnOverlay && !this.imageState.isVisible()) await this.resumeCurrentGame();
         }
     }
 
@@ -563,6 +572,13 @@ export class GameTranslatorLogic {
     // Runs all pre-checks that would prevent a translation from starting.
     // Returns false and shows a toast if any check fails.
     private canStartTranslation(): boolean {
+        if (this.readingMode) {
+            if (this.ocrProvider !== 'chromescreenai' && this.ocrProvider !== 'rapidocr') {
+                this.notify('Choose local OCR', 3000, 'Japanese reading uses Chrome Screen AI or RapidOCR.');
+                return false;
+            }
+            return true;
+        }
         const inputLang = this.getInputLanguage();
         const targetLang = this.getTargetLanguage();
         if (!inputLang && targetLang) {

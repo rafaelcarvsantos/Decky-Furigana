@@ -8,6 +8,7 @@
 import logging
 import os
 import subprocess
+import sys
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,7 @@ def find_python(plugin_dir: str) -> Optional[str]:
         logger.warning(f"Bundled Python at {bundled} failed version check")
 
     candidates = [
+        sys.executable,
         "/usr/bin/python3.13",
         "/usr/local/bin/python3.13",
         "/usr/bin/python3",

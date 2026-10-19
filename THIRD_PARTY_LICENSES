@@ -1,6 +1,21 @@
 This file lists the third-party dependencies used by Decky Translator and their respective licenses.
 All pip packages also include full license files in their .dist-info directories within the plugin-dependencies.tar.gz archive.
 
+Offline Japanese reader:
+fugashi (https://github.com/polm/fugashi): MIT; bundled MeCab: BSD.
+unidic-lite (https://github.com/polm/unidic-lite): MIT wrapper; UniDic dictionary:
+BSD (also offered under GPL/LGPL). Notices ship in unidic_lite/dicdir/COPYING
+and the distribution's LICENSE.unidic.
+jamdict and jamdict-data (https://github.com/neocl/jamdict): MIT code.
+JMdict / KANJIDIC dictionary material: copyright James William Breen and
+The Electronic Dictionary Research and Development Group (EDRDG).
+The bundled jamdict-data 1.5 data is licensed under CC BY-SA 3.0.
+Source and documentation: https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project
+License: https://www.edrdg.org/edrdg/licence.html
+The full data notice is retained in jamdict_data/LICENSE.md in the dependency archive.
+The reader uses the bundled database without modifying it; English senses are
+dictionary entries, and the data is independent of this plugin's source license.
+
 RapidOCR (rapidocr-onnxruntime)
 https://github.com/RapidAI/RapidOCR
 License: Apache License 2.0

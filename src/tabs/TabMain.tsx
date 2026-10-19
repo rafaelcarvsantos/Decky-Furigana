@@ -95,7 +95,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
             || (settings.ocrProvider === 'rapidocr' && !providerStatus.rapidocr_downloaded));
 
     const translationNeedsDownload =
-        settings.ocrProvider !== 'gemini_vision'
+        !settings.readingMode && settings.ocrProvider !== 'gemini_vision'
         && settings.translationProvider === 'ct2'
         && !!providerStatus
         && !providerStatus.nllb_downloaded;
@@ -129,7 +129,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
         if (ocrNeedsDownload || translationNeedsDownload) {
             return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><HiInboxArrowDown size={20} /> Download required</span>;
         }
-        return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><BsTranslate /> Translate</span>;
+        return <span style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}><BsTranslate /> {settings.readingMode ? 'Read Japanese' : 'Translate'}</span>;
     };
 
     return (
@@ -146,6 +146,12 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
 
                 {settings.enabled && (
                     <>
+                        <PanelSectionRow>
+                            <ToggleField label="Japanese reading mode"
+                                description="Offline furigana and English word lookup. Use Chrome Screen AI for precise positioning, or RapidOCR with the word strip."
+                                checked={settings.readingMode}
+                                onChange={value => updateSetting('readingMode', value)} />
+                        </PanelSectionRow>
                         <PanelSectionRow>
                             <ButtonItem
                                 bottomSeparator="standard"
@@ -165,7 +171,8 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                         <span style={{ marginLeft: '6px', fontWeight: 'bold' }}>Gemini</span>
                                     </div>
                                 )}
-                                {settings.ocrProvider !== 'gemini_vision' && (
+                                {settings.readingMode && <div>Japanese readings and English word lookup · Offline</div>}
+                                {!settings.readingMode && settings.ocrProvider !== 'gemini_vision' && (
                                     <div style={{ display: 'flex', alignItems: 'center', marginBottom: '4px' }}>
                                         <BsEye style={{ marginRight: '8px', color: '#aaa' }} />
                                         <span style={{ color: '#888' }}>Text Recognition:</span>
@@ -324,7 +331,7 @@ export const TabMain: VFC<TabMainProps> = ({ logic, overlayVisible, providerStat
                                         </span>
                                     </div>
                                 )}
-                                <div style={{ marginLeft: '22px', marginBottom: '6px' }}>
+                                <div style={{ marginLeft: '22px', marginBottom: '6px', display: settings.readingMode ? 'none' : undefined }}>
                                     {settings.ocrProvider === 'gemini_vision' && (
                                         <>
                                             <div style={{ color: '#666', fontSize: '10px' }}>

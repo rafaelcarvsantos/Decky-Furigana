@@ -18,6 +18,13 @@ Might be helpful for learning a new language by playing games or some other purp
 
 ![Translation Demo](assets/translation.gif)
 
+## Japanese learning mode (this fork)
+
+This fork adds an offline snapshot reader with furigana and selectable English
+dictionary definitions. See [development and device testing instructions](DEVELOPMENT.md)
+for installation, usage, limitations, and checks. It requires an updated dependency
+archive; the existing upstream 0.9.1 archive does not include the Japanese packages.
+
 ## Requirements
 
 - Steam Deck (LCD or OLED)

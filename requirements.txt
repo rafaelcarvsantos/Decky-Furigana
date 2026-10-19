@@ -11,3 +11,8 @@ ctranslate2>=4.5.0
 sentencepiece>=0.2.0
 protobuf>=6.33.1
 py3langid>=0.3.0
+# Offline Japanese morphology and English dictionary (also shipped in dependency archive)
+fugashi==1.5.2
+unidic-lite==1.0.8
+jamdict==0.1a11.post2
+jamdict-data==1.5
