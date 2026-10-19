@@ -22,8 +22,10 @@ Might be helpful for learning a new language by playing games or some other purp
 
 This fork adds an offline snapshot reader with furigana and selectable English
 dictionary definitions. See [development and device testing instructions](DEVELOPMENT.md)
-for installation, usage, limitations, and checks. It requires an updated dependency
-archive; the existing upstream 0.9.1 archive does not include the Japanese packages.
+for installation, usage, limitations, and checks. Install this fork’s self-contained
+`Decky-Furigana-Install.zip` from Actions, or repack the existing artifacts using the
+commands there. The upstream store/release installation below does not include
+this fork’s Japanese reader.
 
 ## Requirements
 

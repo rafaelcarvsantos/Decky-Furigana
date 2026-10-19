@@ -29,7 +29,7 @@ BIN_DIR = os.path.join(PLUGIN_DIR, "bin")
 DEPENDENCIES_ARCHIVE = os.path.join(BIN_DIR, "plugin-dependencies.tar.gz")
 EXTRACTION_MARKER = os.path.join(BIN_DIR, ".dependencies-extracted")
 BIN_PY_MODULES_DIR = os.path.join(BIN_DIR, "py_modules")
-BIN_RAPIDOCR_DIR = os.path.join(BIN_DIR, "rapidocr")
+BIN_RAPIDOCR_DIR = os.path.join(BIN_PY_MODULES_DIR, "rapidocr")
 BIN_PYTHON_DIR = os.path.join(BIN_DIR, "python313")
 
 def _should_extract_dependencies():

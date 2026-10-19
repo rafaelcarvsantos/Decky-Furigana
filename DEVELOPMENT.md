@@ -5,6 +5,112 @@ recognized kanji where OCR symbol boxes are available, and opens English
 dictionary senses when a word is selected. It uses no Furifont, cloud translation,
 or language model. The existing translation mode remains available.
 
+## Install this fork on Steam Deck
+
+The fork keeps the `Decky Translator` display name and `decky-translator` folder
+for compatibility. It replaces the upstream plugin; do not install both together.
+Do not use the upstream store/release package for Japanese mode.
+
+### From new GitHub Actions builds (preferred)
+
+Run **Build and Release** using workflow_dispatch on the desired branch, or use a
+main/PR build. Download the `decky-translator-plugin` artifact, extract the Actions
+wrapper ZIP, and install the inner **Decky-Furigana-Install.zip** through Decky
+Settings → General → Developer Mode → Developer → Install Plugin from ZIP.
+Do not select the Actions wrapper ZIP. The inner ZIP is self-contained; the
+separate dependency artifact is only needed for repacking older builds.
+
+### Repair the already downloaded artifacts without building Python or Node
+
+Use the inner `Decky Translator.zip` and `plugin-dependencies.tar.gz` from the
+**same workflow run**, not their outer Actions wrapper ZIPs. With the files already
+at the locations used on this Deck:
+
+```sh
+cd /home/deck/Projects/Decky-Furigana
+python3 scripts/package_install.py \
+  '/home/deck/decky-furigana-build/Decky Translator.zip' \
+  /home/deck/decky-furigana-build/plugin-dependencies.tar.gz \
+  /home/deck/Projects/Decky-Furigana/out/Decky-Furigana-Install.zip
+```
+
+Install `out/Decky-Furigana-Install.zip` through Developer Mode. The script verifies
+the old artifact's dependency SHA256, removes `remote_binary` from the packaged
+manifest, repairs the old startup directory check, and stores the compressed
+archive at `decky-translator/bin/plugin-dependencies.tar.gz`. It does not alter
+input files, installed plugins, SteamOS, settings, or saves.
+
+### Why the old installation failed
+
+Decky Loader reads `package.json` after unzipping and downloads **every** declared
+`remote_binary`; already bundled files do not skip that step. The old workflow
+changed the tag/hash but retained `cat-in-a-box/Decky-Translator` in the URL. Dev
+builds did not publish any corresponding release, either. Changing only the URL
+would still leave a missing dev release or an unpublished draft release.
+Failed remote downloads leave extracted files behind but skip plugin import.
+See [Decky's installer implementation](https://github.com/SteamDeckHomebrew/decky-loader/blob/main/backend/decky_loader/browser.py).
+
+The new installer declares no remote binaries. First startup extracts the tarball
+under `bin/`, preserving executable bits and symlinks that ZIP extraction alone
+would lose. Expected paths:
+
+```text
+decky-translator/
+  plugin.json
+  package.json                 # no remote_binary
+  main.py
+  dist/index.js
+  py_modules/                  # plugin source, providers and worker
+  bin/plugin-dependencies.tar.gz
+  bin/py_modules/               # extracted pip packages and dictionaries
+  bin/python313/python/bin/python3.13
+  bin/.dependencies-extracted
+```
+
+Keep roughly 2 GiB free for the installer, archive and extracted data. First load
+can take longer while unpacking. Subsequent loads reuse the extracted files.
+The startup check now looks for `bin/py_modules/rapidocr`, matching the archive,
+rather than the nonexistent `bin/rapidocr` which caused repeated extraction.
+Decky assigns ownership for its host user and the plugin extracts as that user;
+no `chmod 777`, system Python installation or SteamOS read-only changes are needed.
+
+### Troubleshooting and runtime check
+
+After an installation failure, restart Decky once before retrying: older loader
+versions can leave their plugin watcher disabled on this error path. This briefly
+interrupts all Decky plugins; it does not delete their data:
+
+```sh
+sudo systemctl restart plugin_loader.service
+journalctl -u plugin_loader.service -n 150 --no-pager
+```
+
+The display name remains **Decky Translator**. If logs still mention downloading
+remote binaries, the selected ZIP is stale or a second folder with the same
+`plugin.json` name exists. Inspect rather than deleting directories blindly:
+
+```sh
+find /home/deck/homebrew/plugins -maxdepth 2 -name plugin.json -print
+cat /home/deck/homebrew/plugins/decky-translator/package.json
+ls -ld /home/deck/homebrew/plugins/decky-translator/bin
+```
+
+Once startup completes, verify the portable runtime and actual offline data as
+the normal `deck` user (no sudo):
+
+```sh
+PLUGIN=/home/deck/homebrew/plugins/decky-translator
+PYTHONPATH="$PLUGIN/bin/py_modules:$PLUGIN/py_modules" \
+  "$PLUGIN/bin/python313/python/bin/python3.13" -B -c \
+  'from japanese_reader import JapaneseReader; r=JapaneseReader(); print(r.lookup("食べる", "食べる", "たべる"))'
+```
+
+Also check journal output for extraction/import errors, available disk space,
+and ownership if this fails. Do not manually unpack dependencies into the root
+`py_modules` or place the runtime at root `python313`: workers expect `bin/`.
+OCR models remain separate one-time downloads through the plugin; the installer
+includes dictionaries and Python packages, not Screen AI/RapidOCR/NLLB models.
+
 ## Use on Steam Deck
 
 1. Install a plugin build with the **updated dependency archive**. The existing

@@ -56,12 +56,5 @@
         "react-dom"
       ]
     }
-  },
-  "remote_binary": [
-    {
-      "name": "plugin-dependencies.tar.gz",
-      "url": "https://github.com/cat-in-a-box/Decky-Translator/releases/download/0.9.1/plugin-dependencies.tar.gz",
-      "sha256hash": "9348f327816abf8de7abd7a4f44a1f625b6fc5c762be2c0f4a479dded4979ba6"
-    }
-  ]
+  }
 }

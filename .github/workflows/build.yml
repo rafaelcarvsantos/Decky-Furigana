@@ -136,57 +136,26 @@ jobs:
           echo "is_release=$IS_RELEASE" >> $GITHUB_OUTPUT
           echo "Version: $VERSION (is_release: $IS_RELEASE)"
 
-      - name: Update package.json with release values
-        if: steps.version.outputs.is_release == 'true'
+      - name: Set packaged version
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.version }}
         run: |
-          sed -i -E "s#\"version\": \"[0-9]+\.[0-9]+\.[0-9]+\"#\"version\": \"${{ steps.version.outputs.version }}\"#g" package.json
-          sed -i -E "s#/download/(__VERSION__|v?[0-9]+\.[0-9]+\.[0-9]+|dev-[a-f0-9]+)/#/download/${{ steps.version.outputs.version }}/#g" package.json
-          sed -i -E "s#\"sha256hash\": \"(__SHA256__|[a-f0-9]{64})\"#\"sha256hash\": \"${{ steps.dependencies_hash.outputs.sha256 }}\"#g" package.json
-          grep "version" package.json | head -1
-          grep -A5 "remote_binary" package.json
-
-      - name: Commit and tag release
-        if: steps.version.outputs.is_release == 'true'
-        run: |
-          git config user.name "Alexander Timoshuk"
-          git config user.email "46809884+cat-in-a-box@users.noreply.github.com"
-
-          if git diff --quiet package.json; then
-            echo "No changes to package.json"
-          else
-            git add package.json
-            git commit -m "chore: update package.json for release ${{ steps.version.outputs.version }}
-
-          - Set remote_binary URL to ${{ steps.version.outputs.version }}
-          - Set SHA256 hash to ${{ steps.dependencies_hash.outputs.sha256 }}"
-
-            git push origin HEAD:main
-          fi
-
-          git tag -fa "${{ steps.version.outputs.version }}" -m "Release ${{ steps.version.outputs.version }}"
-          git push origin "${{ steps.version.outputs.version }}" --force
-
-      - name: Update package.json for dev build
-        if: steps.version.outputs.is_release != 'true'
-        run: |
-          sed -i -E "s#/download/(__VERSION__|v?[0-9]+\.[0-9]+\.[0-9]+|dev-[a-f0-9]+)/#/download/${{ steps.version.outputs.version }}/#g" package.json
-          sed -i -E "s#\"sha256hash\": \"(__SHA256__|[a-f0-9]{64})\"#\"sha256hash\": \"${{ steps.dependencies_hash.outputs.sha256 }}\"#g" package.json
-          grep -A5 "remote_binary" package.json
+          python - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          path = Path('package.json')
+          data = json.loads(path.read_text())
+          data['version'] = os.environ['BUILD_VERSION']
+          path.write_text(json.dumps(data, indent=2) + '\n')
+          PYCODE
 
       - name: Build plugin with Decky CLI
-        run: |
-          cli/decky plugin build $(pwd) -o ./out
+        run: cli/decky plugin build "$(pwd)" -o ./out
 
-      - name: Repack zip with kebab-case inner folder
+      - name: Package self-contained installer
         run: |
-          cd out
-          mkdir _staging
-          unzip -q "Decky Translator.zip" -d _staging
-          mv "_staging/Decky Translator" "_staging/decky-translator"
-          rm "Decky Translator.zip"
-          (cd _staging && zip -qr "../Decky Translator.zip" decky-translator)
-          rm -rf _staging
-          unzip -l "Decky Translator.zip" | head -5
+          python scripts/package_install.py "out/Decky Translator.zip" plugin-dependencies.tar.gz out/Decky-Furigana-Install.zip
+          rm "out/Decky Translator.zip"
 
       - name: Upload plugin artifact
         uses: actions/upload-artifact@v4
@@ -225,7 +194,7 @@ jobs:
           tag_name: ${{ needs.build.outputs.version }}
           token: ${{ secrets.RELEASE_TOKEN }}
           files: |
-            Decky Translator.zip
+            Decky-Furigana-Install.zip
             plugin-dependencies.tar.gz
           draft: true
           generate_release_notes: true
