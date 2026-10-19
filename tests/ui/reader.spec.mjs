@@ -66,3 +66,22 @@ test('shows dictionary errors without closing the reading overlay', async ({ pag
     await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeVisible();
     expect(await page.evaluate(() => window.readerDismissed)).toBe(false);
 });
+
+
+test('grouped hit targets and grammar-only words support selection and navigation', async ({ page }) => {
+    await page.evaluate(() => window.readerShowGroups());
+    await page.locator('button[aria-label="思っていた おもっていた"]').click();
+    await expect(page.getByRole('status')).toContainText('Inflected vocabulary');
+    await expect(page.getByRole('status')).toContainText('to think');
+    await expect(page.getByRole('status')).toContainText('〜ていた');
+    expect(await page.evaluate(() => window.readerCalls[0].lemma)).toBe('思う');
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Grammar expression');
+    await expect(page.getByRole('status')).toContainText('agreement or realization');
+    await expect(page.getByRole('status')).not.toContainText('No English dictionary entry');
+    expect(await page.evaluate(() => window.readerCalls.length)).toBe(1);
+    await expect(page.getByRole('button', { name: /じゃないか.*じゃないか/ })).toBeVisible();
+    await page.getByRole('button', { name: 'Previous', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('to think');
+    expect(await page.evaluate(() => window.readerCalls.length)).toBe(1);
+});

@@ -59,6 +59,89 @@ class AlignmentTests(unittest.TestCase):
         self.assertEqual(span_rect(region, 1, 2)['left'], 30)
 
 
+class LearnerGroupingTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.reader = JapaneseReader()
+
+    def test_gameplay_examples(self):
+        for text, expected in [
+            ('そりゃ よかったじゃないか', ['そりゃ', 'よかった', 'じゃないか']),
+            ('大丈夫だと思っていたよ', ['大丈夫', 'だ', 'と', '思っていた', 'よ']),
+        ]:
+            with self.subTest(text=text):
+                self.assertEqual([t['surface'] for t in self.reader.tokenize(text)], expected)
+
+    def test_common_inflections_and_grammar(self):
+        for text in ('食べた', '読まない', '読まなかった', '食べている', '思っていた',
+                     '行きたい', '行きたかった', 'よかった', 'かわいくない', 'かわいくなかった',
+                     'しなければならない', 'かもしれない', '食べていなかった'):
+            with self.subTest(text=text):
+                tokens = self.reader.tokenize(text)
+                self.assertEqual([t['surface'] for t in tokens], [text])
+                self.assertEqual(''.join(t['surface'] for t in tokens[0]['morphology']), text)
+
+    def test_particles_boundaries_and_literal_negatives(self):
+        cases = [
+            ('猫じゃない犬だ', ['猫', 'じゃ', 'ない', '犬', 'だ']),
+            ('学生じゃないかもしれない', ['学生', 'じゃ', 'ない', 'かもしれない']),
+            ('走って犬を見る', ['走っ', 'て', '犬', 'を', '見る']),
+            ('食べ た', ['食べ', 'た']),
+            ('食べ、た', ['食べ', 'た']),
+            ('猫がいる', ['猫', 'が', 'いる']),
+        ]
+        for text, expected in cases:
+            with self.subTest(text=text):
+                self.assertEqual([t['surface'] for t in self.reader.tokenize(text)], expected)
+        literal = self.reader.tokenize('猫じゃない犬だ')
+        self.assertFalse(any(t['grammar'] for t in literal))
+
+    def test_original_offsets_and_all_characters_are_preserved(self):
+        text = '「そりゃ よかったじゃないか！」 大丈夫だと思っていたよ。'
+        tokens = self.reader.tokenize(text)
+        cursor, restored = 0, ''
+        for token in tokens:
+            self.assertGreaterEqual(token['start'], cursor)
+            restored += text[cursor:token['start']] + token['surface']
+            self.assertEqual(token['surface'], text[token['start']:token['end']])
+            for part in token['morphology']:
+                self.assertEqual(part['surface'], text[part['start']:part['end']])
+                self.assertIn('cform', part)
+            cursor = token['end']
+        self.assertEqual(restored + text[cursor:], text)
+
+    def test_group_reading_geometry_and_dictionary_lemma(self):
+        token = self.reader.analyze([line_region('思っていた')])[0]['learningTokens'][0]
+        self.assertEqual(token['reading'], 'おもっていた')
+        self.assertEqual(token['lemma'], '思う')
+        self.assertEqual(token['kind'], 'inflected')
+        self.assertEqual(token['ruby'][0]['reading'], 'おも')
+        self.assertEqual(token['ruby'][0]['rect']['right'], 30)
+        self.assertEqual(token['rect']['right'], 10 + len('思っていた') * 20)
+        self.assertEqual([t['surface'] for t in token['morphology']], ['思っ', 'て', 'い', 'た'])
+        definitions = self.reader.lookup(token['surface'], token['lemma'], token['reading'])
+        self.assertTrue(any('to think' in gloss for e in definitions for s in e['senses'] for gloss in s['glosses']))
+
+    def test_coarse_and_partial_symbol_coverage(self):
+        region = line_region('食べている')
+        region.pop('symbols')
+        token = self.reader.analyze([region])[0]['learningTokens'][0]
+        self.assertEqual(token['surface'], '食べている')
+        self.assertIsNone(token['rect'])
+        region = line_region('思っていた')
+        region['symbols'].pop()
+        token = self.reader.analyze([region])[0]['learningTokens'][0]
+        self.assertIsNone(token['rect'])
+        self.assertIsNotNone(token['ruby'][0]['rect'])
+
+    def test_grammar_annotations_do_not_claim_contextual_translation(self):
+        sentence = self.reader.tokenize('よかったじゃないか')[-1]
+        self.assertEqual(sentence['kind'], 'grammar')
+        self.assertIn('literal negative question', sentence['grammar'][0]['meaning'])
+        self.assertEqual(self.reader.tokenize('しなければならない')[0]['lemma'], '為る')
+        self.assertEqual(self.reader.tokenize('かもしれない')[0]['kind'], 'grammar')
+
+
 class ScreenAISchemaTests(unittest.TestCase):
     def annotation(self, text='今日'):
         annotation = proto.VisualAnnotation()
@@ -97,7 +180,8 @@ class OfflineIntegrationTests(unittest.TestCase):
         with patch('socket.socket.connect', side_effect=AssertionError('Network must not be used')):
             result = self.reader.analyze([line_region('食べました。')])
             word = next(t for t in result[0]['learningTokens'] if t['lemma'] == '食べる')
-            self.assertEqual(word['reading'], 'たべ')
+            self.assertEqual(word['surface'], '食べました')
+            self.assertEqual(word['reading'], 'たべました')
             self.assertEqual(word['ruby'][0]['reading'], 'た')
             self.assertEqual(word['ruby'][0]['rect']['right'], 30)
             entries = self.reader.lookup(word['surface'], word['lemma'], word['reading'])

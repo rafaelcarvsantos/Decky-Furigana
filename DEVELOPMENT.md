@@ -215,3 +215,54 @@ and menus can produce valid 1280×800 PNGs below this threshold. Logs saying
 loads the PNG using Pillow in the bundled Python runtime, off the backend event
 loop, rather than checking compressed file size. Malformed/truncated images
 remain rejected. This applies to PipeWire, Spectacle and portal captures.
+
+## Learner-friendly word grouping
+
+Fugashi/UniDic still supplies the morphology. A small offline grouping pass now
+combines contiguous verb/adjective inflections before creating selectable units:
+
+```text
+そりゃ よかったじゃないか → そりゃ | よかった | じゃないか
+大丈夫だと思っていたよ → 大丈夫 | だ | と | 思っていた | よ
+食べている | 行きたい | 読まなかった | しなければならない | かもしれない
+```
+
+Each unit retains `morphology` with the original component surfaces, readings,
+lemmas, parts of speech, conjugation types/forms and absolute character offsets.
+Its surface is a slice of the original OCR text. Whitespace and punctuation stay
+in the original line and block merging across gaps; grouping never rewrites text.
+The unit's reading concatenates complete component readings. If a component has
+no reading, the full reading is left empty rather than presenting a partial one.
+Furigana retains each component's alignment, shifted into the grouped unit's
+coordinates. Complete OCR symbol coverage is still required for a hit target;
+coarse/vertical OCR continues to use the word strip and controller navigation.
+
+The meaning panel labels vocabulary, inflected vocabulary and grammar expressions.
+Inflected units retain the head lemma, so `思っていた` looks up `思う` in JMdict.
+Recognized grammar-only units show small built-in English notes instead of an
+unrelated lookup for an auxiliary such as `だ`. Notes currently cover `〜ている`
+(including past `〜ていた`), `〜たい`, `〜なければならない`, `かもしれない` and
+sentence-final `じゃないか`. These are possible functions, not contextual sentence
+translations. Literal negative questions remain possible even at sentence end.
+`じゃない` alone is not automatically labeled as an agreement expression.
+
+Rules use adjacency, UniDic part-of-speech/conjugation features and a short list
+of supported surface patterns. They do not merge arbitrary phrases, cross OCR
+lines, attach case/final particles generally, or combine every auxiliary verb.
+For example, connective `て` without auxiliary `いる` remains separate. Compound
+nouns, noun+する units, dialect forms, `〜ておく` and more elaborate polite grammar
+remain future work. UniDic or OCR mistakes can still affect grouping. The pass
+adds no models, dictionaries, network requests or background processes and uses
+the existing bounded tokenization cache.
+
+Automated tests cover gameplay examples, inflections, literal-negative boundary
+cases, lossless offsets, grouped readings/geometry and lemma lookup. Browser
+fixtures cover grouped selection, grammar notes, cached lookup and navigation;
+actual Steam controller focus still requires device testing.
+
+To obtain a new installer, push the feature branch and open **Actions → Build and
+Release → Run workflow**, selecting `feature/learner-grouping`. Alternatively open
+a pull request targeting main to trigger the checks and build. Download the
+`decky-translator-plugin` artifact, extract its Actions wrapper, then install the
+inner `Decky-Furigana-Install.zip` when ready. No changes from this iteration are
+automatically installed on the device.

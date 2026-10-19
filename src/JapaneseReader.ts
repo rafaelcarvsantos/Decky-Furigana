@@ -8,6 +8,10 @@ export interface ReadingToken {
     lemma: string;
     reading: string;
     pos: string;
+    kind?: "vocabulary" | "inflected" | "grammar";
+    grammar?: Array<{ pattern: string; meaning: string }>;
+    morphology?: Array<{ surface: string; lemma: string; reading: string; pos: string;
+        pos2: string; ctype: string; cform: string; start: number; end: number }>;
     rect: ReadingRect | null;
     ruby: Array<{ reading: string; rect: ReadingRect | null }>;
 }
@@ -25,6 +29,7 @@ export async function readJapanese(path: string): Promise<TranslatedRegion[]> {
 }
 
 export async function lookupJapanese(token: ReadingToken): Promise<DictionaryEntry[]> {
+    if (token.kind === "grammar") return [];
     const response = await call<[string, string, string], DictionaryEntry[] | { error: string; message: string }>(
         'lookup_japanese', token.surface, token.lemma, token.reading);
     if (!Array.isArray(response)) throw new Error(response?.message || 'Dictionary lookup failed');

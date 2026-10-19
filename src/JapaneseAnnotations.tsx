@@ -21,7 +21,7 @@ export const JapaneseAnnotations: VFC<{
         let active = true;
         setEntries([]);
         if (!selected) return;
-        const key = JSON.stringify([selected.surface, selected.lemma, selected.reading]);
+        const key = JSON.stringify([selected.kind, selected.surface, selected.lemma, selected.reading]);
         const cached = cache.current.get(key);
         if (cached) {
             setEntries(cached);
@@ -109,7 +109,10 @@ export const JapaneseAnnotations: VFC<{
             </div>}
             {selected && <div role="status" aria-live="polite" style={{ maxHeight: '25vh', overflowY: 'auto', marginTop: 8 }}>
                 <strong>{selected.surface}</strong>　{selected.reading}　<span style={{ opacity: .7 }}>({selected.lemma})</span>
-                {message && <div>{message}</div>}
+                {selected.kind && <div>{selected.kind === 'grammar' ? 'Grammar expression' :
+                    selected.kind === 'inflected' ? 'Inflected vocabulary' : 'Vocabulary'}</div>}
+                {selected.grammar?.map((note, i) => <div key={i}>{note.pattern}: {note.meaning}</div>)}
+                {message && selected.kind !== 'grammar' && <div>{message}</div>}
                 {entries.map(entry => <div key={entry.id} style={{ marginTop: 8 }}>
                     <div>{entry.spellings.join('・') || entry.readings.join('・')} — {entry.readings.join('・')}</div>
                     <ol style={{ margin: '4px 0', paddingLeft: 24 }}>{entry.senses.map((sense, i) =>
