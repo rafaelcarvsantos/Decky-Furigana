@@ -93,6 +93,7 @@ import requests
 from providers import ProviderManager, TextRegion, NetworkError, ApiKeyError, RateLimitError
 from providers.translation_cache import TranslationCache, PROVIDER_TIERS, normalize
 from providers.japanese_service import JapaneseService
+from providers.capture_validation import valid_capture_png
 from providers.base import ProviderType
 
 _processing_lock = False
@@ -1591,8 +1592,7 @@ class Plugin:
             logger.info("Screenshot already in progress, skipping")
             raise RuntimeError("Screenshot already in progress")
 
-        # Real captures run 100KB+, tiny PNGs are videoconvert corruption or missing frames
-        MIN_VALID_SIZE = 30_000
+        # PNG compression size depends on scene content; validate decoded images instead.
         MAX_ATTEMPTS = 3
 
         FALLBACK_NUM_BUFFERS = 1
@@ -1636,12 +1636,12 @@ class Plugin:
                 if self._capture_backend == "pipewire":
                     result = await self._take_screenshot_pipewire(
                         env, screenshot_path,
-                        MIN_VALID_SIZE, MAX_ATTEMPTS, FALLBACK_NUM_BUFFERS, FALLBACK_STDDEV_THRESHOLD,
+                        MAX_ATTEMPTS, FALLBACK_NUM_BUFFERS, FALLBACK_STDDEV_THRESHOLD,
                     )
                 elif self._capture_backend == "spectacle":
-                    result = await self._take_screenshot_spectacle(env, screenshot_path, MIN_VALID_SIZE)
+                    result = await self._take_screenshot_spectacle(env, screenshot_path)
                 elif self._capture_backend == "portal":
-                    result = await self._take_screenshot_portal(env, screenshot_path, MIN_VALID_SIZE)
+                    result = await self._take_screenshot_portal(env, screenshot_path)
                 else:
                     logger.error("No capture backend available for this session")
                     return result
@@ -1659,7 +1659,7 @@ class Plugin:
         finally:
             _processing_lock = False
 
-    async def _take_screenshot_pipewire(self, env, screenshot_path, MIN_VALID_SIZE, MAX_ATTEMPTS, FALLBACK_NUM_BUFFERS, FALLBACK_STDDEV_THRESHOLD):
+    async def _take_screenshot_pipewire(self, env, screenshot_path, MAX_ATTEMPTS, FALLBACK_NUM_BUFFERS, FALLBACK_STDDEV_THRESHOLD):
         env = dict(env)
         env.update({
             "XDG_SESSION_TYPE": "wayland",
@@ -1790,8 +1790,8 @@ class Plugin:
                     continue
 
                 size = os.path.getsize(screenshot_path)
-                if size < MIN_VALID_SIZE:
-                    logger.warning(f"Attempt {attempt}: screenshot too small ({size} bytes, min {MIN_VALID_SIZE}) - likely corrupted frame")
+                if not await asyncio.to_thread(valid_capture_png, PLUGIN_DIR, screenshot_path):
+                    logger.warning(f"Attempt {attempt}: invalid captured PNG ({size} bytes)")
                     continue
 
                 base64_data = get_base64_image(screenshot_path)
@@ -1839,7 +1839,7 @@ class Plugin:
         self._capture_backend = None
         return {"path": "", "base64": ""}
 
-    async def _take_screenshot_spectacle(self, env, screenshot_path, MIN_VALID_SIZE):
+    async def _take_screenshot_spectacle(self, env, screenshot_path):
         # PyInstaller injects LD_LIBRARY_PATH=/tmp/_MEIxxx/ which has older libs that break Qt-linked binaries.
         env = self._clean_system_binary_env(env)
         proc = await asyncio.create_subprocess_exec(
@@ -1861,8 +1861,8 @@ class Plugin:
             return {"path": "", "base64": ""}
 
         size = os.path.getsize(screenshot_path)
-        if size < MIN_VALID_SIZE:
-            logger.warning(f"spectacle screenshot too small ({size} bytes, min {MIN_VALID_SIZE})")
+        if not await asyncio.to_thread(valid_capture_png, PLUGIN_DIR, screenshot_path):
+            logger.warning(f"spectacle invalid captured PNG ({size} bytes)")
             self._capture_backend = None
             return {"path": "", "base64": ""}
 
@@ -1874,7 +1874,7 @@ class Plugin:
         logger.debug(f"Screenshot saved via spectacle ({size} bytes)")
         return {"path": screenshot_path, "base64": base64_data}
 
-    async def _take_screenshot_portal(self, env, screenshot_path, MIN_VALID_SIZE):
+    async def _take_screenshot_portal(self, env, screenshot_path):
         # Result arrives as a Request.Response signal; start gdbus monitor before issuing the call to avoid a race.
         env = self._clean_system_binary_env(env)
         handle_token = f"deckytr_{int(time.time() * 1000)}"
@@ -1936,8 +1936,8 @@ class Plugin:
                 pass
 
             size = os.path.getsize(screenshot_path)
-            if size < MIN_VALID_SIZE:
-                logger.warning(f"portal screenshot too small ({size} bytes, min {MIN_VALID_SIZE})")
+            if not await asyncio.to_thread(valid_capture_png, PLUGIN_DIR, screenshot_path):
+                logger.warning(f"portal invalid captured PNG ({size} bytes)")
                 self._capture_backend = None
                 return {"path": "", "base64": ""}
 

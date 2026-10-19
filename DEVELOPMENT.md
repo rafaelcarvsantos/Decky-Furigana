@@ -206,3 +206,12 @@ horizontal text for inline readings; tokenizer boundaries can split compounds;
 rare names, ambiguous readings and OCR mistakes can yield incorrect or missing
 readings. The bundled dictionary is a fixed snapshot, not an automatically updated
 lexicon. See `THIRD_PARTY_LICENSES` and bundled package/data notices for attribution.
+
+## Valid screenshots rejected as capture failures
+
+Older builds rejected all PNGs smaller than 30 KB. Highly compressible pixel art
+and menus can produce valid 1280×800 PNGs below this threshold. Logs saying
+`screenshot too small` do not prove capture corruption. Capture validation now
+loads the PNG using Pillow in the bundled Python runtime, off the backend event
+loop, rather than checking compressed file size. Malformed/truncated images
+remain rejected. This applies to PipeWire, Spectacle and portal captures.
