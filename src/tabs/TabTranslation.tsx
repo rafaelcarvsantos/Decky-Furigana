@@ -18,6 +18,7 @@ import {
 
 import { VFC, useState, useEffect, useRef, useCallback, RefObject } from "react";
 import { call } from "@decky/api";
+import type { SingleDropdownOption } from '@decky/ui';
 import { useSettings } from "../SettingsContext";
 import { HiKey, HiLockClosed, HiInboxArrowDown, HiTrash, HiXMark, HiXCircle, HiExclamationTriangle, HiInformationCircle } from "react-icons/hi2";
 import { BsArrowRepeat, BsStars } from "react-icons/bs";
@@ -338,7 +339,7 @@ const CacheEntriesModal: VFC<{ closeModal?: () => void; onCleared?: () => void }
     );
 };
 
-const knownGeminiModels: DropdownItem[] = [
+const knownGeminiModels: SingleDropdownOption[] = [
     { label: <span>2.5 Flash</span>, data: "gemini-2.5-flash" },
     { label: <span>2.5 Flash Lite</span>, data: "gemini-2.5-flash-lite" },
     { label: <span>3 Flash (Preview)</span>, data: "gemini-3-flash-preview" },
@@ -352,7 +353,7 @@ const GeminiModelSelector: VFC<{
     hasApiKey: boolean;
     onChange: (model: string) => void;
 }> = ({ selectedModel, hasApiKey, onChange }) => {
-    const [models, setModels] = useState<DropdownItem[]>(knownGeminiModels);
+    const [models, setModels] = useState<SingleDropdownOption[]>(knownGeminiModels);
     const [loading, setLoading] = useState(false);
     const [validated, setValidated] = useState(false);
 

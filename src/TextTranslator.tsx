@@ -3,6 +3,7 @@
 import { call } from "@decky/api";
 import { TextRegion, NetworkError, ApiKeyError, RateLimitError, ModelNotAvailableError, ErrorResponse } from "./TextRecognizer";
 import { logger } from "./Logger";
+import type { ReadingToken } from './JapaneseReader';
 
 // Type guard to check if response is an error
 function isErrorResponse(value: unknown): value is ErrorResponse {
@@ -12,6 +13,7 @@ function isErrorResponse(value: unknown): value is ErrorResponse {
 // Include translated text with the original region info
 export interface TranslatedRegion extends TextRegion {
     translatedText: string;
+    learningTokens?: ReadingToken[];
 }
 
 export class TextTranslator {

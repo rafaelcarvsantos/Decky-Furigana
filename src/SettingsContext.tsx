@@ -7,6 +7,7 @@ import { logger } from './Logger';
 
 // Define the settings interface
 export interface Settings {
+    readingMode: boolean;
     inputLanguage: string;
     targetLanguage: string;
     inputMode: InputMode;
@@ -49,6 +50,7 @@ type SettingsAction =
 
 // Define the initial state
 const initialSettings: Settings = {
+    readingMode: false,
     inputLanguage: "",
     targetLanguage: "",
     inputMode: InputMode.L5_BUTTON,  // Default to L5 back button
@@ -127,6 +129,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
 
                 // Map backend settings to frontend settings
                 const mappedSettings: Partial<Settings> = {
+                    readingMode: serverSettings.reading_mode ?? false,
                     inputLanguage: serverSettings.input_language,
                     targetLanguage: serverSettings.target_language,
                     inputMode: serverSettings.input_mode,
@@ -164,6 +167,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
                 dispatch({ type: 'INITIALIZE_SETTINGS', settings: mappedSettings });
 
                 // Update logic instance with settings
+                logic.setReadingMode(serverSettings.reading_mode ?? false);
                 logic.setInputLanguage(serverSettings.input_language);
                 logic.setTargetLanguage(serverSettings.target_language);
                 logic.setInputMode(serverSettings.input_mode);
@@ -209,6 +213,7 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
 
             // Map frontend setting key to backend setting key
             const backendKeyMap: Record<keyof Settings, string> = {
+                readingMode: 'reading_mode',
                 inputLanguage: 'input_language',
                 targetLanguage: 'target_language',
                 inputMode: 'input_mode',
@@ -250,6 +255,9 @@ export const SettingsProvider: React.FC<SettingsProviderProps> = ({
 
             // Update logic based on setting type
             switch (key) {
+                case 'readingMode':
+                    logic.setReadingMode(value);
+                    break;
                 case 'inputLanguage':
                     logic.setInputLanguage(value);
                     break;

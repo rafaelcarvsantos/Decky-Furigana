@@ -92,6 +92,8 @@ import requests
 # Import provider system
 from providers import ProviderManager, TextRegion, NetworkError, ApiKeyError, RateLimitError
 from providers.translation_cache import TranslationCache, PROVIDER_TIERS, normalize
+from providers.japanese_service import JapaneseService
+from providers.base import ProviderType
 
 _processing_lock = False
 
@@ -1305,13 +1307,19 @@ class Plugin:
             value = cleaned
             logger.info(f"{key} set (len={len(value)})")
         try:
-            if key == "target_language":
+            if key == "reading_mode":
+                value = bool(value)
+                if not value and getattr(self, "_japanese_service", None):
+                    await asyncio.to_thread(self._japanese_service.close)
+            elif key == "target_language":
                 self._target_language = value
             elif key == "input_language":
                 self._input_language = value
             elif key == "input_mode":
                 self._input_mode = value
             elif key == "enabled":
+                if not value and getattr(self, "_japanese_service", None):
+                    await asyncio.to_thread(self._japanese_service.close)
                 if self._provider_manager:
                     if value:
                         if self._rapidocr_persistent_mode:
@@ -1500,6 +1508,7 @@ class Plugin:
     async def get_all_settings(self):
         try:
             settings = {
+                "reading_mode": self._settings.get_setting("reading_mode", False),
                 "target_language": self._target_language,
                 "input_language": self._input_language,
                 "input_mode": self._input_mode,
@@ -2155,6 +2164,58 @@ class Plugin:
                     ]
         except Exception as e:
             logger.debug(f"Background color sampling failed (non-fatal): {e}")
+
+    def _get_japanese_service(self):
+        if not getattr(self, "_japanese_service", None):
+            self._japanese_service = JapaneseService(PLUGIN_DIR)
+        return self._japanese_service
+
+    async def discard_screenshot(self, image_path: str):
+        path = Path(image_path).resolve()
+        if Path(self._screenshotPath).resolve() in path.parents:
+            path.unlink(missing_ok=True)
+
+    async def read_japanese_file(self, image_path: str):
+        # Keep this path strictly offline, regardless of translation settings.
+        root = Path(self._screenshotPath).resolve()
+        path = Path(image_path).resolve()
+        if root not in path.parents or not path.is_file():
+            return {"error": "reading_error", "message": "Invalid screenshot path"}
+        if getattr(self, "_reading_busy", False):
+            path.unlink(missing_ok=True)
+            return {"error": "reading_error", "message": "The previous reading is still finishing. Try again shortly."}
+        self._reading_busy = True
+        try:
+            if self._ocr_provider not in ("chromescreenai", "rapidocr"):
+                raise RuntimeError("Choose Chrome Screen AI or RapidOCR for offline Japanese reading.")
+            if not self._provider_manager:
+                raise RuntimeError("OCR is not initialized")
+            provider_type = ProviderType.CHROME_SCREEN_AI if self._ocr_provider == "chromescreenai" else ProviderType.RAPIDOCR
+            provider = self._provider_manager.get_ocr_provider(provider_type)
+            if not provider or not provider.is_available("ja"):
+                raise RuntimeError("Install the selected local OCR model in Translation settings first.")
+
+            def recognize():
+                return asyncio.run(provider.recognize(path.read_bytes(), "ja"))
+
+            regions = await asyncio.to_thread(recognize)
+            return await asyncio.to_thread(self._get_japanese_service().request, "analyze",
+                                           regions=[r.to_dict() for r in regions])
+        except Exception as error:
+            logger.error("Japanese reading failed: %s", error)
+            return {"error": "reading_error", "message": str(error)}
+        finally:
+            self._reading_busy = False
+            path.unlink(missing_ok=True)
+
+    async def lookup_japanese(self, surface: str, lemma: str, reading: str):
+        try:
+            if any(not isinstance(v, str) or len(v) > 100 for v in (surface, lemma, reading)):
+                raise ValueError("Invalid dictionary query")
+            return await asyncio.to_thread(self._get_japanese_service().request, "lookup",
+                                           surface=surface, lemma=lemma, reading=reading)
+        except Exception as error:
+            return {"error": "reading_error", "message": str(error)}
 
     async def recognize_text(self, image_data: str):
         try:
@@ -2862,6 +2923,8 @@ class Plugin:
     async def _unload(self):
         logger.info("Unloading plugin")
         try:
+            if getattr(self, "_japanese_service", None):
+                await asyncio.to_thread(self._japanese_service.close)
             if self._provider_manager:
                 self._provider_manager.shutdown()
 

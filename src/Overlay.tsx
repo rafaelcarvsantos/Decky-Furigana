@@ -5,6 +5,7 @@ import { findModuleChild } from "@decky/ui";
 
 import { VFC, useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { TranslatedRegion } from "./TextTranslator";
+import { JapaneseAnnotations } from './JapaneseAnnotations';
 import { logger } from "./Logger";
 import { buildTranslatedFontFamily, ensureFontLoaded, resolveFontStyleCSS } from "./fonts";
 import type { FontStyleOption } from "./fonts";
@@ -379,7 +380,8 @@ export const TranslatedTextOverlay: VFC<{
     translatedTextAlignment: HorizontalTextAlignment,
     translatedTextFontFamily: string,
     translatedTextFontStyle: FontStyleOption
-}> = ({ visible, imageData, regions, loading, processingStep, processingDetail, processingIsError, translationsVisible, fontScale, allowLabelGrowth, translatedTextAlignment, translatedTextFontFamily, translatedTextFontStyle }) => {
+    onDismiss: () => void
+}> = ({ visible, imageData, regions, loading, processingStep, processingDetail, processingIsError, translationsVisible, fontScale, allowLabelGrowth, translatedTextAlignment, translatedTextFontFamily, translatedTextFontStyle, onDismiss }) => {
     // Composition layer is handled by CompositionRequest below -- only mounted when visible
 
     // Ref to the screenshot image element
@@ -485,7 +487,7 @@ export const TranslatedTextOverlay: VFC<{
 
     return (
         <>
-        {visible && <CompositionRequest level={UIComposition.Notification} />}
+        {visible && <CompositionRequest level={regions.some(r => r.learningTokens) ? UIComposition.Overlay : UIComposition.Notification} />}
         <div id='translation-overlay'
              style={{
                  height: "100vh",
@@ -518,8 +520,10 @@ export const TranslatedTextOverlay: VFC<{
                             maxHeight: "calc(100vh - 2px)",
                             maxWidth: "calc(100vw - 2px)",
                             objectFit: "contain",
+                            display: 'block',
                             backgroundColor: "rgba(0, 0, 0, 0.15)",
-                            border: translationsVisible ? "1px solid #f44336" : "1px solid #ffc107",
+                            border: 'none',
+                            outline: regions.some(r => r.learningTokens) ? 'none' : translationsVisible ? "1px solid #f44336" : "1px solid #ffc107",
                             imageRendering: "pixelated"
                         }}
                         alt="Screenshot"
@@ -570,6 +574,7 @@ export const TranslatedTextOverlay: VFC<{
                         });
 
                         return regions.map((region, index) => {
+                            if (region.learningTokens) return null;
                             const fontSize = calculateFontSize(region, generalFactor, fontScale);
                             let displayText = region.translatedText || region.text;
 
@@ -675,6 +680,10 @@ export const TranslatedTextOverlay: VFC<{
                             );
                         });
                     })()}
+
+                    {visible && !loading && translationsVisible && regions.some(r => r.learningTokens) &&
+                        <JapaneseAnnotations regions={regions} width={imageDimensions.width} height={imageDimensions.height}
+                            scaleX={getScalingFactor().widthFactor} scaleY={getScalingFactor().heightFactor} onDismiss={onDismiss} />}
 
                     {/* Indicator when translations are hidden - eye closed icon */}
                     {!translationsVisible && !loading && (
@@ -839,6 +848,7 @@ export const ImageOverlay: VFC<{ state: ImageState, onDismiss: () => void }> = (
 
     return (
         <TranslatedTextOverlay
+            onDismiss={onDismiss}
             visible={visible}
             imageData={imageData}
             regions={regions}

@@ -37,7 +37,15 @@ jobs:
         run: npm install -g pnpm@9
 
       - name: Install frontend dependencies
-        run: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Check frontend types
+        run: pnpm run typecheck
+
+      - name: Test reading overlay in Chromium
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm test
 
       - name: Build frontend
         run: pnpm run build
@@ -59,6 +67,9 @@ jobs:
       - name: Install Python packages (Python 3.13)
         run: |
           pip install -r requirements.txt -t dependencies_build/py_modules --no-cache-dir
+
+      - name: Test offline Japanese reader
+        run: PYTHONPATH=dependencies_build/py_modules python -B -m unittest discover -s tests -v
 
       - name: Install cp311 packages for Decky Loader runtime
         run: |

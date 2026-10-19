@@ -60,6 +60,8 @@ class TextRegion:
     is_dialog: bool = False
     bg_color: Optional[List[int]] = None  # [R, G, B] average background color
     translated_text: Optional[str] = None  # Pre-translated text
+    symbols: Optional[List[Dict]] = None
+    horizontal: bool = True
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for JSON serialization."""
@@ -73,6 +75,9 @@ class TextRegion:
             d["bgColor"] = self.bg_color
         if self.translated_text is not None:
             d["translatedText"] = self.translated_text
+        if self.symbols is not None:
+            d["symbols"] = self.symbols
+            d["horizontal"] = self.horizontal
         return d
 
 

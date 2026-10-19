@@ -192,11 +192,40 @@ def _proto_to_regions(proto_bytes, scale_x, scale_y, min_confidence):
         right = int(round((x + w) * scale_x))
         bottom = int(round((y + h) * scale_y))
 
+        # Preserve symbol boxes and their offsets in the exact exported text.
+        # A partial/mismatched sequence must never manufacture character positions.
+        symbols = []
+        cursor = 0
+        for word in line.words:
+            for symbol in word.symbols:
+                value = symbol.utf8_string
+                if not value:
+                    continue
+                start = text.find(value, cursor)
+                if start < 0 or text[cursor:start].strip():
+                    symbols = []
+                    break
+                sb = symbol.bounding_box
+                symbols.append({
+                    "start": start, "end": start + len(value), "text": value,
+                    "rect": {"left": round(sb.x * scale_x), "top": round(sb.y * scale_y),
+                             "right": round((sb.x + sb.width) * scale_x),
+                             "bottom": round((sb.y + sb.height) * scale_y)},
+                })
+                cursor = start + len(value)
+            else:
+                continue
+            break
+        if text[cursor:].strip():
+            symbols = []
+        horizontal = line.direction in (0, 1) and abs(bb.angle) < 1
         is_dialog = len(text) > 15 or any(p in text for p in '.?!,:;"')
         regions.append({
             "text": text,
             "rect": {"left": left, "top": top, "right": right, "bottom": bottom},
             "confidence": confidence,
+            "symbols": symbols,
+            "horizontal": horizontal,
             "is_dialog": is_dialog,
         })
     return regions
